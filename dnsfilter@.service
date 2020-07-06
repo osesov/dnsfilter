@@ -5,7 +5,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/local/bin/dnsfilter --ipv6=false --bind "%I"
+ExecStart=/usr/local/bin/dnsfilter --ipv6=false --bind "%I" --forward 8.8.8.8
 
 #RuntimeDirectory=dhcpd4
 #PIDFile=/run/dhcpd4/dhcpd.pid

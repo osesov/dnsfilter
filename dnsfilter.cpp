@@ -1082,6 +1082,7 @@ bool string_to_bool(const char * str, bool def_value)
 
 	if (strcasecmp(str, "0") == 0
 	|| strcasecmp(str, "no") == 0
+	|| strcasecmp(str, "disable") == 0
 	|| strcasecmp(str, "false") == 0)
 		return false;
 	return true;
@@ -1111,13 +1112,15 @@ main(int argc, char ** argv)
 	DnsServer::Settings settings;
 
 	settings.listen_port = 53;
-	settings.forward_address = "8.8.8.8";
+	settings.forward_address = std::string();
 	settings.ipv4 = true;
 	settings.ipv6 = true;
 	settings.ttl = std::chrono::minutes(10);
 
 	std::string hosts = std::string();
 
+	setvbuf(stdout, nullptr, _IOLBF, BUFSIZ);
+	setvbuf(stderr, nullptr, _IOLBF, BUFSIZ);
 
 	while( (opt = getopt_long(argc, argv, "l:f:h:", options, nullptr)) != -1) {
 		switch (opt)
