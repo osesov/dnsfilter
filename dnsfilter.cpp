@@ -15,6 +15,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <ifaddrs.h>
 #include <errno.h>
 
 #include <vector>
@@ -529,6 +530,8 @@ struct DnsServer
 		uint16_t listen_port;
 		std::string forward_address;
 		std::chrono::duration<uint32_t> ttl;
+
+		std::string bind;
 	};
 
 
@@ -614,6 +617,7 @@ private:
 
 	bool is_forwarder() const { return !settings_.forward_address.empty(); }
 
+	void get_bind_addr(struct in_addr &);
 	void resolve_forwarder_address();
 
 	static ssize_t recvfrom(int fd, void *__restrict buf, size_t n, int flags, Address&);
@@ -932,6 +936,45 @@ void DnsServer::resolve_forwarder_address()
 }
 
 void
+DnsServer::get_bind_addr(struct in_addr & sin_addr)
+{
+
+	if (settings_.bind.empty()) {
+		sin_addr.s_addr = INADDR_ANY;
+		return;
+	}
+
+	// it might be IP
+	if (inet_pton(AF_INET, settings_.bind.c_str(), &sin_addr)) {
+		return;
+	}
+
+	// interface name othewise
+	struct ifaddrs *ifaddr, *ifa;
+
+   	if (getifaddrs(&ifaddr) == -1) {
+        perror("getifaddrs");
+        exit(EXIT_FAILURE);
+    }
+
+	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+        if (ifa->ifa_addr == NULL)
+            continue;
+
+       	if (ifa->ifa_addr->sa_family != AF_INET)
+		   continue;
+
+		if (strcmp(ifa->ifa_name, settings_.bind.c_str()) != 0)
+			continue;
+
+		sin_addr = reinterpret_cast<const sockaddr_in*>(ifa->ifa_addr)->sin_addr;
+		break;
+	}
+
+	freeifaddrs(ifaddr);
+}
+
+void
 DnsServer::run()
 {
 	struct sockaddr_in serveraddr;	/* server's addr */
@@ -965,6 +1008,8 @@ DnsServer::run()
 	serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
 	serveraddr.sin_port = htons((unsigned short)settings_.listen_port);
 
+	get_bind_addr(serveraddr.sin_addr);
+
 	/*
 	 * build the Forward's Internet address
 	 */
@@ -977,7 +1022,7 @@ DnsServer::run()
 	if (bind(sockfd_, (struct sockaddr *)&serveraddr, sizeof(serveraddr)) < 0)
 		die("ERROR on bind()");
 
-	std::cout << "Listen on port " << settings_.listen_port << '\n';
+	std::cout << "Listen on " << inet_ntoa(serveraddr.sin_addr) << ":" << ntohs(serveraddr.sin_port) << '\n';
 	if (is_forwarder())
 		std::cout << "Forward requests to " << forward_address_.ntop() << '\n';
 
@@ -1047,14 +1092,17 @@ main(int argc, char ** argv)
 {
 	enum {
 		Option_IPV4 = 256,
-		Option_IPV6
+		Option_IPV6,
+		Option_Bind,
 	};
+
 	static const struct option options[] = {
 		{ "listen", required_argument, nullptr, 'l' },
 		{ "forward", required_argument, nullptr, 'f' },
 		{ "hosts", required_argument, nullptr, 'h' },
 		{ "ipv4", optional_argument, nullptr, Option_IPV4 },
 		{ "ipv6", optional_argument, nullptr, Option_IPV6 },
+		{ "bind", required_argument, nullptr, Option_Bind },
 		{}
 	};
 
@@ -1080,6 +1128,7 @@ main(int argc, char ** argv)
 
 		case Option_IPV4: settings.ipv4 = string_to_bool(optarg, true); break;
 		case Option_IPV6: settings.ipv6 = string_to_bool(optarg, true); break;
+		case Option_Bind: settings.bind = optarg; break;
 
 		case ':':
 			std::cerr << "Missing argument";

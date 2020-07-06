@@ -11,7 +11,8 @@
             "program": "${workspaceFolder}/dnsfilter",
             "args": [
                 "--hosts", "hosts.db",
-                "--forward", ""
+                "--forward", "",
+                "--bind", "192.168.90.1",
             ],
             "stopAtEntry": false,
             "cwd": "${workspaceFolder}",
